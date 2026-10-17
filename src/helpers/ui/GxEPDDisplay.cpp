@@ -219,6 +219,9 @@ void GxEPDDisplay::endFrame() {
     display.setPartialWindow(0, 0, display.width(), display.height());
   } else if (crc != last_display_crc_value) {
     display.display(true);
+#ifdef EINK_POWEROFF_AFTER_UPDATE
+    display.powerOff();   // stop driving the panel so the image doesn't fade lighter
+#endif
     if (_cycles_before_full_refresh > 0) {
       _cycles_before_full_refresh--;
     }
