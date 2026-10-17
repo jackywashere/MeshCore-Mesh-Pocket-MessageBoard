@@ -203,7 +203,6 @@ private:
     int prev = _page;
     _page = (p + COUNT) % COUNT;
     _map_mode = false;
-    _map.clearRoute();
     if (_page != prev) display.forceFullRefresh();   // clean flash on every page change
     if (_page == MAP) _map.collect();
   }
@@ -455,14 +454,14 @@ public:
   bool isOnBoard() const { return _page == BOARD; }
   bool isOnMap() const { return _page == MAP; }
 
-  // called for each incoming message while the map page is showing
-  void showRoute(const char* sender, bool has_pos, int32_t lat, int32_t lon, const mesh::Packet* pkt, const char* msg) {
+  // called for every incoming message; the map keeps the latest route until the next one
+  void recordRoute(const char* sender, bool has_pos, int32_t lat, int32_t lon, const mesh::Packet* pkt, const char* msg) {
     _map.collect();
     bool flood = pkt->isRouteFlood();
     int hs = flood ? pkt->getPathHashSize() : 1;
     int hops = flood ? pkt->getPathHashCount() : 0;
     _map.setRoute(sender, has_pos, lat, lon, pkt->path, hs, hops, !flood, msg, _prefs->node_lat, _prefs->node_lon);
-    display.forceFullRefresh();
+    if (_page == MAP) display.forceFullRefresh();
   }
 
 #if UI_DISCOVER_SCREEN
