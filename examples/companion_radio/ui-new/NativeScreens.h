@@ -187,7 +187,7 @@ private:
     int prev = _page;
     _page = (p + COUNT) % COUNT;
     _map_mode = false;
-    if (_page == BOARD || _page == MAP || prev == MAP) display.forceFullRefresh();
+    if (_page != prev) display.forceFullRefresh();   // clean flash on every page change
     if (_page == MAP) _map.collect();
   }
 
@@ -506,6 +506,7 @@ public:
       case MAP:
         _map.render(ui, _prefs->node_lat, _prefs->node_lon, s.map_zoom, _map_mode, UiSettings::nameLen(s.name_len));
         hint = _map_mode ? (portrait ? "click +   double -" : "click: zoom in   double: out   hold: done") : "hold: zoom";
+        if (!_map_mode && _prefs->node_lat == 0 && _prefs->node_lon == 0) hint = portrait ? "no location set" : "hold: zoom   (set your location in the app)";
         if (_map_mode) dot = -1;
         ui.header(title, now(), tz(), batt(), bt);   // after the map so nothing draws over it
         break;
@@ -529,8 +530,14 @@ public:
     UiSettings& s = S();
 
     if (_page == MAP && _map_mode) {
-      if (c == KEY_NEXT || c == KEY_RIGHT) { if (s.map_zoom < MapView::ZOOM_COUNT - 1) s.map_zoom++; return true; }
-      if (c == KEY_PREV || c == KEY_LEFT) { if (s.map_zoom > 0) s.map_zoom--; return true; }
+      if (c == KEY_NEXT || c == KEY_RIGHT) {
+        if (s.map_zoom < MapView::ZOOM_COUNT - 1) { s.map_zoom++; display.forceFullRefresh(); }
+        return true;
+      }
+      if (c == KEY_PREV || c == KEY_LEFT) {
+        if (s.map_zoom > 0) { s.map_zoom--; display.forceFullRefresh(); }
+        return true;
+      }
       if (c == KEY_ENTER) { _map_mode = false; s.save(); return true; }
       return false;
     }

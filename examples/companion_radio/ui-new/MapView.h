@@ -246,18 +246,29 @@ public:
     // view centre and size
     double clat, clon, height_km;
     double k;
-    if (zoom == 0) {
+    double aspect = (_bot - _top) / (double)_W;   // height / width of the map area
+    if (zoom == 0 && have_me) {
+      // centred on you, grown evenly until every node fits
+      clat = me_lat; clon = me_lon;
+      k = cos(clat * DEG_TO_RAD);
+      double h = 0;
+      for (int i = 0; i < _count; i++) {
+        double dla = fabs(_nodes[i].lat * 1e-6 - me_lat) * 110.57 * 2;
+        double dlo = fabs(_nodes[i].lon * 1e-6 - me_lon) * 111.32 * k * 2 * aspect;
+        h = fmax(h, fmax(dla, dlo));
+      }
+      height_km = fmax(h * 1.12, 5.0);
+    } else if (zoom == 0) {
       double a = 90, b = -90, c = 180, d = -180;
       for (int i = 0; i < _count; i++) {
         double la = _nodes[i].lat * 1e-6, lo = _nodes[i].lon * 1e-6;
         a = fmin(a, la); b = fmax(b, la); c = fmin(c, lo); d = fmax(d, lo);
       }
-      if (have_me) { a = fmin(a, me_lat); b = fmax(b, me_lat); c = fmin(c, me_lon); d = fmax(d, me_lon); }
       if (a > b) { a = b = 49.25; c = d = -123.0; }   // nothing known yet
       clat = (a + b) / 2; clon = (c + d) / 2;
       k = cos(clat * DEG_TO_RAD);
       double h = (b - a) * 110.57;
-      double w = (d - c) * 111.32 * k * (_bot - _top) / (double)_W;
+      double w = (d - c) * 111.32 * k * aspect;
       height_km = fmax(fmax(h, w) * 1.15, 5.0);
     } else {
       if (have_me) { clat = me_lat; clon = me_lon; }
