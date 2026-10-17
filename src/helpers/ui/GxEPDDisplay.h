@@ -44,6 +44,7 @@ class GxEPDDisplay : public DisplayDriver {
   int last_display_crc_value = 0;
   int _cycles_before_full_refresh;
   int max_partial_refresh = EINK_MAX_PARTIAL_REFRESH; // so this can be changed by an option after
+  bool _do_full_refresh = false;
 
 public:
 #if defined(EINK_DISPLAY_MODEL)
@@ -71,4 +72,10 @@ public:
   void drawXbm(int x, int y, const uint8_t* bits, int w, int h) override;
   uint16_t getTextWidth(const char* str) override;
   void endFrame() override;
+
+  // native (unscaled) access, used by screens that draw at the panel's real resolution
+  Adafruit_GFX& gfx() { return display; }
+  int nativeWidth() { return display.width(); }
+  int nativeHeight() { return display.height(); }
+  void crcAdd(const void* data, size_t len) { display_crc.update<uint8_t>((const uint8_t*)data, len); }
 };

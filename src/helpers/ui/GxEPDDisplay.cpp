@@ -104,10 +104,9 @@ void GxEPDDisplay::startFrame(ColorVal bkg) {
   if (_cycles_before_full_refresh != 0) {
     display.setPartialWindow(0, 0, display.width(), display.height());
   } else {
-    // forces a full wipe of the screen ...
-    display.clearScreen(0xFF); // Clears microcontroller side RAM
-    display.writeScreenBuffer(0xFF); // Forces 0xFF (White) into the display controller's history registers
-    // we'll need a partial refresh after that (whatever crc value is)
+    // next endFrame() does a real full refresh (all pixels driven), which clears ghosting
+    display.setFullWindow();
+    _do_full_refresh = true;
     last_display_crc_value = 0;
     resetPartialRefreshCounter();
   }
@@ -214,7 +213,11 @@ uint16_t GxEPDDisplay::getTextWidth(const char* str) {
 void GxEPDDisplay::endFrame() {
   if (_isOn == false) return;
   uint32_t crc = display_crc.finalize();
-  if (crc != last_display_crc_value) {
+  if (_do_full_refresh) {
+    _do_full_refresh = false;
+    display.display(false);  // full refresh
+    display.setPartialWindow(0, 0, display.width(), display.height());
+  } else if (crc != last_display_crc_value) {
     display.display(true);
     if (_cycles_before_full_refresh > 0) {
       _cycles_before_full_refresh--;

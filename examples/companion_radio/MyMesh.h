@@ -94,6 +94,7 @@ public:
       virtual void onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t txt_type, uint32_t sender_timestamp, const char* text) = 0;
       virtual void onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_details, const char* text) = 0;
       virtual void onQueueSizeChanged(int msgcount) = 0;
+      virtual void onChannelMessageSent(ChannelDetails& channel_details, const char* sender, const char* text, int len) { }
       virtual void onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) { }
       virtual void onControlDataRecv(const mesh::Packet* pkt) { }
       virtual void onChannelDataRecv(mesh::Packet *pkt, const mesh::GroupChannel &channel, uint16_t data_type,

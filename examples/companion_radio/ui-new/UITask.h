@@ -21,6 +21,7 @@
 
 #include "../AbstractUITask.h"
 #include "../NodePrefs.h"
+#include "MessageBoard.h"
 
 #ifdef UI_NO_DISCOVER_SCREEN
   #error "UI_NO_DISCOVER_SCREEN is obsolete - use -D UI_DISCOVER_SCREEN=0 instead"
@@ -76,6 +77,10 @@ class UITask : public AbstractUITask {
   UIScreen* home;
   UIScreen* msg_preview;
   UIScreen* curr;
+#ifdef UI_MESSAGE_BOARD
+  MessageBoard* _msg_board = NULL;
+  bool isBoardChannel(const ChannelDetails& ch) const;
+#endif
 
   void userLedHandler();
 
@@ -118,6 +123,10 @@ public:
   void onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t txt_type, uint32_t sender_timestamp, const char* text) override;
   void onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_details, const char* text) override;
   void onQueueSizeChanged(int offline_queue_size) override;
+#ifdef UI_MESSAGE_BOARD
+  void onChannelMessageSent(ChannelDetails& channel_details, const char* sender, const char* text, int len) override;
+  MessageBoard* getMessageBoard() { return _msg_board; }
+#endif
   void onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) override;
   void onControlDataRecv(const mesh::Packet* pkt) override;
 
