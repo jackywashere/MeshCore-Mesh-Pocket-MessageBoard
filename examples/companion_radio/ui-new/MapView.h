@@ -639,7 +639,7 @@ public:
     // zoom tag top right, inverted while zooming
     char zl[24];
     if (_route) snprintf(zl, sizeof(zl), "%s", _route_tag);
-    else if (zoom == 0) snprintf(zl, sizeof(zl), "All");
+    else if (zoom == 0) snprintf(zl, sizeof(zl), "%d node%s", _count, _count == 1 ? "" : "s");
     else snprintf(zl, sizeof(zl), "%d km", zoomKm(zoom));
     ui.font(u8g2_font_helvB08_tf);
     int tw = ui.width(zl);

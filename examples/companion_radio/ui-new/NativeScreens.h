@@ -170,7 +170,7 @@ public:
 
 class NativeHomeScreen : public UIScreen {
 public:
-  enum Page { BOARD, STATUS, HEARD, MAP, RADIO, BLUETOOTH, ADVERT, DISCOVER, SETTINGS, POWER, COUNT };
+  enum Page { BOARD, MAP, STATUS, HEARD, RADIO, BLUETOOTH, ADVERT, DISCOVER, SETTINGS, POWER, COUNT };
 
 private:
   UITask* _task;
@@ -453,7 +453,7 @@ public:
     : _task(task), _rtc(rtc), _prefs(prefs) { _last_input = millis(); }
 
   bool isOnBoard() const { return _page == BOARD; }
-  bool isOnMap() const { return _page == MAP && !_map_mode; }
+  bool isOnMap() const { return _page == MAP; }
 
   // called for each incoming message while the map page is showing
   void showRoute(const char* sender, bool has_pos, int32_t lat, int32_t lon, const mesh::Packet* pkt, const char* msg) {
@@ -521,7 +521,7 @@ public:
       return 15000;
     }
 
-    static const char* titles[COUNT] = { "", "Status", "Recently heard", "Map", "Radio", "Bluetooth",
+    static const char* titles[COUNT] = { "", "Map", "Status", "Recently heard", "Radio", "Bluetooth",
                                          "Advert", "Repeaters nearby", "Settings", "Power" };
     const char* title = titles[_page];
     if (_page == SETTINGS && _edit) title = "Settings  editing";
@@ -533,10 +533,10 @@ public:
       case STATUS: pageStatus(ui); break;
       case HEARD: pageHeard(ui); break;
       case MAP:
-        _map.render(ui, _prefs->node_lat, _prefs->node_lon, s.map_zoom, _map_mode, UiSettings::nameLen(s.name_len));
-        hint = _map_mode ? (portrait ? "click +   double -" : "click: zoom in   double: out   hold: done") : "hold: zoom";
-        if (!_map_mode && _prefs->node_lat == 0 && _prefs->node_lon == 0) hint = portrait ? "no location set" : "hold: zoom   (set your location in the app)";
-        if (_map.hasRoute() && !_map_mode) {
+        _map.render(ui, _prefs->node_lat, _prefs->node_lon, 0, false, UiSettings::nameLen(s.name_len));
+        hint = portrait ? "hold: landscape" : "hold: portrait";
+        if (_prefs->node_lat == 0 && _prefs->node_lon == 0) hint = portrait ? "no location set" : "hold: portrait   no location set";
+        if (_map.hasRoute()) {
           static char fm[160];
           snprintf(fm, sizeof(fm), "%s", _map.routeMessage());
           ui.font(u8g2_font_helvR08_tf);
@@ -544,7 +544,6 @@ public:
           hint = fm;
           dot = -1;
         }
-        if (_map_mode) dot = -1;
         ui.header(title, now(), tz(), batt(), bt);   // after the map so nothing draws over it
         break;
       case RADIO: pageRadio(ui); break;
@@ -566,18 +565,6 @@ public:
     _last_input = millis();
     UiSettings& s = S();
 
-    if (_page == MAP && _map_mode) {
-      if (c == KEY_NEXT || c == KEY_RIGHT) {
-        if (s.map_zoom < MapView::ZOOM_COUNT - 1) { s.map_zoom++; display.forceFullRefresh(); }
-        return true;
-      }
-      if (c == KEY_PREV || c == KEY_LEFT) {
-        if (s.map_zoom > 0) { s.map_zoom--; display.forceFullRefresh(); }
-        return true;
-      }
-      if (c == KEY_ENTER) { _map_mode = false; s.save(); return true; }
-      return false;
-    }
     if (_page == SETTINGS && _edit) {
       if (c == KEY_NEXT || c == KEY_RIGHT) { _edit_item = (_edit_item + 1) % SETTINGS_COUNT; return true; }
       if (c == KEY_PREV || c == KEY_LEFT) { changeSetting(_edit_item); return true; }
@@ -603,7 +590,11 @@ public:
 
     if (c == KEY_ENTER) {
       switch (_page) {
-        case MAP: _map_mode = true; _map.clearRoute(); _map.collect(); display.forceFullRefresh(); return true;
+        case MAP:   // flip between landscape and portrait, keeping any route on screen
+          s.map_portrait ^= 1;
+          s.save();
+          display.forceFullRefresh();
+          return true;
         case BLUETOOTH:
           if (_task->isBluetoothEnabled()) _task->disableBluetooth(); else _task->enableBluetooth();
           return true;

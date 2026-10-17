@@ -12,7 +12,7 @@
 
 struct UiSettings {
   uint8_t magic = UI_SETTINGS_MAGIC;
-  uint8_t version = 1;
+  uint8_t version = 2;
   uint8_t board_channel = 0;  // channel index shown on the board
   uint8_t text_large = 0;     // board text size
   uint8_t name_len = 1;       // index into nameLenOptions
@@ -20,7 +20,7 @@ struct UiSettings {
   uint8_t dark = 0;           // white on black
   uint8_t idle = 1;           // index into idleOptions
   uint8_t refresh = 1;        // index into refreshOptions
-  uint8_t map_portrait = 1;   // map page orientation
+  uint8_t map_portrait = 0;   // map page orientation (landscape by default)
   uint8_t map_zoom = 0;       // last map zoom level
   uint8_t reserved[5] = { 0 };
 
@@ -39,6 +39,7 @@ struct UiSettings {
       UiSettings tmp;
       if (f.read((uint8_t*)&tmp, sizeof(tmp)) == sizeof(tmp) && tmp.magic == UI_SETTINGS_MAGIC) {
         *this = tmp;
+        if (version < 2) { map_portrait = 0; version = 2; }   // map now defaults to landscape
       }
       f.close();
     }
