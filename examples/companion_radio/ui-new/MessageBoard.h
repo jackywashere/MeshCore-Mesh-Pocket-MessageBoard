@@ -17,6 +17,10 @@
   #define BOARD_CHANNEL_NAME "Public"  // channel shown on the board
 #endif
 
+#ifndef BOARD_NAME_CHARS
+  #define BOARD_NAME_CHARS 5           // other people's names are shortened to this many characters
+#endif
+
 #define BOARD_FROM_LEN   32
 #define BOARD_TEXT_LEN   168
 #define BOARD_MAX_LINES  24
@@ -36,7 +40,7 @@ class MessageBoard {
   int _count = 0;
   int _head = -1;      // index of newest message
   int _scroll = 0;     // how many messages the view is scrolled back from the newest
-  bool _large = true;  // text size
+  bool _large = false; // text size (small by default)
   U8G2_FOR_ADAFRUIT_GFX _u8;
   bool _u8_ready = false;
   char _tmp[BOARD_TEXT_LEN + 1];
@@ -285,6 +289,12 @@ public:
 
       char name[BOARD_FROM_LEN + 1];
       snprintf(name, sizeof(name), "%s", m.from);
+      if (!m.mine) {  // shorten other people's names, counting characters not bytes
+        int chars = 0, b = 0;
+        while (name[b] && chars < BOARD_NAME_CHARS) { b = nextChar(name, b, strlen(name)); chars++; }
+        name[b] = 0;
+        while (b > 0 && name[b - 1] == ' ') name[--b] = 0;
+      }
       _u8.setFont(f_name);
       int name_w = name[0] ? _u8.getUTF8Width(name) + (m.mine ? 10 : 5) : 0;
 
