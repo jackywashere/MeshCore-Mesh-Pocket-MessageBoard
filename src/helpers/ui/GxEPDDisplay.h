@@ -78,4 +78,11 @@ public:
   int nativeWidth() { return display.width(); }
   int nativeHeight() { return display.height(); }
   void crcAdd(const void* data, size_t len) { display_crc.update<uint8_t>((const uint8_t*)data, len); }
+  void setNativeRotation(int r) {
+    if (display.getRotation() != r) {
+      display.setRotation(r);
+      display.setPartialWindow(0, 0, display.width(), display.height());
+    }
+  }
+  void setMaxPartialRefresh(int n) { max_partial_refresh = n; resetPartialRefreshCounter(); }
 };

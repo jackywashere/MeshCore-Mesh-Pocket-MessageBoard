@@ -33,6 +33,15 @@
 
 #include "icons.h"
 
+#ifdef UI_MESSAGE_BOARD
+  #include "NativeScreens.h"
+  #define HOME_SCREEN_CLASS NativeHomeScreen
+  #define PREVIEW_SCREEN_CLASS NativeMsgPreview
+#else
+  #define HOME_SCREEN_CLASS HomeScreen
+  #define PREVIEW_SCREEN_CLASS MsgPreviewScreen
+#endif
+
 class SplashScreen : public UIScreen {
   UITask* _task;
   unsigned long dismiss_after;
@@ -88,9 +97,6 @@ public:
 
 class HomeScreen : public UIScreen {
   enum HomePage {
-#ifdef UI_MESSAGE_BOARD
-    BOARD,
-#endif
     FIRST,
     RECENT,
     RADIO,
@@ -124,12 +130,6 @@ class HomeScreen : public UIScreen {
   uint32_t disc_nodes_count = 0;
   uint32_t discovery_req_time = 0;
   bool discovery_disp_names = true; // by default desplay names if available (removes SNR_O)
-#endif
-#ifdef UI_MESSAGE_BOARD
-  unsigned long _last_input = 0;
-  #ifndef BOARD_IDLE_RETURN_MILLIS
-    #define BOARD_IDLE_RETURN_MILLIS 60000   // go back to the board after a minute without button presses
-  #endif
 #endif
 
   void renderBatteryIndicator(DisplayDriver& display, uint16_t batteryMilliVolts) {
@@ -255,39 +255,9 @@ public:
     if (_shutdown_init && !_task->isButtonPressed()) {  // must wait for USR button to be released
       _task->shutdown();
     }
-#ifdef UI_MESSAGE_BOARD
-    if (millis() - _last_input > BOARD_IDLE_RETURN_MILLIS) {
-      MessageBoard* mb = _task->getMessageBoard();
-      if (_page != HomePage::BOARD || (mb && mb->isScrolled())) {
-        if (_page != HomePage::BOARD) display.forceFullRefresh();
-        _page = HomePage::BOARD;
-        if (mb) mb->resetScroll();
-        _task->gotoHomeScreen();   // triggers a redraw
-      }
-      _last_input = millis();
-    }
-#endif
   }
 
-#ifdef UI_MESSAGE_BOARD
-  bool isOnBoard() const { return _page == HomePage::BOARD; }
-#endif
-
   int render(DisplayDriver& display) override {
-#ifdef UI_MESSAGE_BOARD
-    if (_page == HomePage::BOARD) {
-      MessageBoard* mb = _task->getMessageBoard();
-      if (mb) {
-        uint16_t mv = _task->getBattMilliVolts();
-        int pct = ((int)mv - BATT_MIN_MILLIVOLTS) * 100 / (BATT_MAX_MILLIVOLTS - BATT_MIN_MILLIVOLTS);
-        if (pct < 0) pct = 0;
-        if (pct > 100) pct = 100;
-        mb->render((GxEPDDisplay&)display, BOARD_CHANNEL_NAME, _rtc->getCurrentTime(),
-                   _node_prefs->tz_offset, pct, _task->hasConnection());
-      }
-      return 15000;
-    }
-#endif
     display.setColor(UIColor::title_bkg);
     display.fillRect(0, 0, display.width(), 12);
     char tmp[80];
@@ -598,36 +568,6 @@ public:
   }
 
   bool handleInput(char c) override {
-#ifdef UI_MESSAGE_BOARD
-    _last_input = millis();
-    if (_page == HomePage::BOARD) {
-      MessageBoard* mb = _task->getMessageBoard();
-      if (mb) {
-        if (c == KEY_PREV || c == KEY_LEFT) {     // double click: scroll back through older messages
-          mb->scrollOlder();
-          return true;
-        }
-        if ((c == KEY_NEXT || c == KEY_RIGHT) && mb->scrollNewer()) {  // click: forward again
-          return true;
-        }
-        if (c == KEY_ENTER) {                     // long press: toggle text size
-          mb->toggleSize();
-          display.forceFullRefresh();
-          _task->showAlert(mb->isLarge() ? "Large text" : "Small text", 800);
-          return true;
-        }
-      }
-    }
-    {
-      uint8_t before = _page;
-      bool r = handleNav(c);
-      if (_page == HomePage::BOARD && before != HomePage::BOARD) display.forceFullRefresh();
-      return r;
-    }
-  }
-
-  bool handleNav(char c) {
-#endif
     if (c == KEY_LEFT || c == KEY_PREV) {
       _page = (_page + HomePage::Count - 1) % HomePage::Count;
       return true;
@@ -822,12 +762,16 @@ void UITask::begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* no
   ui_started_at = millis();
   _alert_expiry = 0;
 
-  splash = new SplashScreen(this);
-  home = new HomeScreen(this, &rtc_clock, sensors, node_prefs);
-  msg_preview = new MsgPreviewScreen(this, &rtc_clock);
 #ifdef UI_MESSAGE_BOARD
+  _ui_settings.load();
+  ((GxEPDDisplay*)_display)->setMaxPartialRefresh(UiSettings::refreshEvery(_ui_settings.refresh));
   _msg_board = new MessageBoard();
+  splash = new NativeSplash(this);
+#else
+  splash = new SplashScreen(this);
 #endif
+  home = new HOME_SCREEN_CLASS(this, &rtc_clock, sensors, node_prefs);
+  msg_preview = new PREVIEW_SCREEN_CLASS(this, &rtc_clock);
   setCurrScreen(splash);
 }
 
@@ -870,7 +814,7 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
   if (!(txt_type == TXT_TYPE_PLAIN || txt_type == TXT_TYPE_SIGNED_PLAIN)) return;
 
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
-  ((MsgPreviewScreen *) msg_preview)->addPreview(path_len, from.name, text);
+  ((PREVIEW_SCREEN_CLASS *) msg_preview)->addPreview(path_len, from.name, text);
   setCurrScreen(msg_preview);
 
   if (_display != NULL) {
@@ -889,12 +833,12 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
 }
 
 #ifdef UI_MESSAGE_BOARD
-bool UITask::isBoardChannel(const ChannelDetails& ch) const {
-  // the default public channel key, so it still matches if the channel was renamed
-  static const uint8_t public_psk[16] = { 0x8b, 0x33, 0x87, 0xe9, 0xc5, 0xcd, 0xea, 0x6a,
-                                          0xc9, 0xe5, 0xed, 0xba, 0xa1, 0x15, 0xcd, 0x72 };
-  if (strcasecmp(ch.name, BOARD_CHANNEL_NAME) == 0) return true;
-  return strcasecmp(BOARD_CHANNEL_NAME, "Public") == 0 && memcmp(ch.channel.secret, public_psk, 16) == 0;
+bool UITask::isBoardChannel(const ChannelDetails& ch) {
+  ChannelDetails sel;
+  if (!the_mesh.getChannel(_ui_settings.board_channel, sel) || sel.name[0] == 0) {
+    if (!the_mesh.getChannel(0, sel)) return false;
+  }
+  return memcmp(ch.channel.secret, sel.channel.secret, sizeof(sel.channel.secret)) == 0;
 }
 
 void UITask::onChannelMessageSent(ChannelDetails& channel_details, const char* sender, const char* text, int len) {
@@ -909,15 +853,14 @@ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_det
 #ifdef UI_MESSAGE_BOARD
   if (_msg_board != NULL && isBoardChannel(channel_details)) {
     _msg_board->addReceived(text, rtc_clock.getCurrentTime());
-    // stays on the board; no popup. Other pages return to the board when idle.
-    if (curr == home && ((HomeScreen*)home)->isOnBoard()) _next_refresh = 100;
+    if (curr == home && ((NativeHomeScreen*)home)->isOnBoard()) _next_refresh = 100;
     if (_display != NULL && !_display->isOn() && !hasConnection()) _display->turnOn();
     if (!hasConnection()) notify(UIEventType::channelMessage);
     return;
   }
 #endif
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
-  ((MsgPreviewScreen *) msg_preview)->addPreview(path_len, channel_details.name, text);
+  ((PREVIEW_SCREEN_CLASS *) msg_preview)->addPreview(path_len, channel_details.name, text);
   setCurrScreen(msg_preview);
 
   if (_display != NULL) {
@@ -951,7 +894,7 @@ void UITask::onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path
 void UITask::onControlDataRecv(const mesh::Packet* packet) {
 #if UI_DISCOVER_SCREEN
   if (packet->payload_len >= 14 && (packet->payload[0] & 0xF0) == CTL_TYPE_NODE_DISCOVER_RESP) {
-    ((HomeScreen *) home)->handleDiscoverResponse(packet);
+    ((HOME_SCREEN_CLASS *) home)->handleDiscoverResponse(packet);
   }
 #endif
 }
@@ -1124,6 +1067,11 @@ void UITask::loop() {
       _display->startFrame();
       int delay_millis = curr->render(*_display);
       if (millis() < _alert_expiry) {  // render alert popup
+#ifdef UI_MESSAGE_BOARD
+        drawAlertBox(EinkUI::get(), _alert);
+        _next_refresh = _alert_expiry;
+      } else if (false) {
+#endif
         _display->setTextSize(1);
         int y = _display->height() / 3;
         int p = _display->height() / 32;
