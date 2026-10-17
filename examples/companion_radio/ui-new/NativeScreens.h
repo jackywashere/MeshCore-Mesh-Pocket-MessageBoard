@@ -139,6 +139,7 @@ public:
   bool handleInput(char c) override {
     if (c == KEY_NEXT || c == KEY_RIGHT) {
       _head = (_head + NATIVE_MAX_UNREAD - 1) % NATIVE_MAX_UNREAD;
+      display.forceFullRefresh();   // clean flash between messages
       if (--_num <= 0) { _num = 0; _task->gotoHomeScreen(); }
       return true;
     }

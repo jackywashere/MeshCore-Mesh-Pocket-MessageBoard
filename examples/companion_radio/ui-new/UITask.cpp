@@ -928,6 +928,9 @@ void UITask::userLedHandler() {
 }
 
 void UITask::setCurrScreen(UIScreen* c) {
+#ifdef UI_MESSAGE_BOARD
+  if (c != curr && _display != NULL) _display->forceFullRefresh();   // clean flash between screens
+#endif
   curr = c;
   _next_refresh = 100;
 }
