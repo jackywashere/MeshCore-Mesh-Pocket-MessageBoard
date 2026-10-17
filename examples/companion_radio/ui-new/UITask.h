@@ -81,6 +81,8 @@ class UITask : public AbstractUITask {
 #ifdef UI_MESSAGE_BOARD
   MessageBoard* _msg_board = NULL;
   UiSettings _ui_settings;
+  uint32_t _snap_time = 0;   // header clock/battery only change when something happens
+  uint16_t _snap_mv = 0;
 #endif
 
   void userLedHandler();
@@ -130,6 +132,9 @@ public:
   MessageBoard* getMessageBoard() { return _msg_board; }
   UiSettings& getUiSettings() { return _ui_settings; }
   NodePrefs* getNodePrefs() { return _node_prefs; }
+  void snapshot();
+  uint32_t snapTime() { if (!_snap_time) snapshot(); return _snap_time; }
+  uint16_t snapMilliVolts() { if (!_snap_mv) snapshot(); return _snap_mv; }
 #endif
   void onDiscoveredContact(ContactInfo &contact, bool is_new, uint8_t path_len, const uint8_t* path) override;
   void onControlDataRecv(const mesh::Packet* pkt) override;

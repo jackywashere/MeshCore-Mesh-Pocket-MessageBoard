@@ -816,6 +816,7 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
   ((PREVIEW_SCREEN_CLASS *) msg_preview)->addPreview(path_len, from.name, text);
 #ifdef UI_MESSAGE_BOARD
+  snapshot();
   if (_display != NULL) _display->forceFullRefresh();
 #endif
   setCurrScreen(msg_preview);
@@ -836,6 +837,11 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
 }
 
 #ifdef UI_MESSAGE_BOARD
+void UITask::snapshot() {
+  _snap_time = rtc_clock.getCurrentTime();
+  _snap_mv = getBattMilliVolts();
+}
+
 bool UITask::isBoardChannel(const ChannelDetails& ch) {
   ChannelDetails sel;
   if (!the_mesh.getChannel(_ui_settings.board_channel, sel) || sel.name[0] == 0) {
@@ -847,6 +853,7 @@ bool UITask::isBoardChannel(const ChannelDetails& ch) {
 void UITask::onChannelMessageSent(ChannelDetails& channel_details, const char* sender, const char* text, int len) {
   if (_msg_board == NULL || !isBoardChannel(channel_details)) return;
   _msg_board->add(sender, text, len, rtc_clock.getCurrentTime(), true);
+  snapshot();
   _msg_board->resetScroll();
   if (curr == home) _next_refresh = 100;
 }
@@ -856,6 +863,7 @@ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_det
 #ifdef UI_MESSAGE_BOARD
   if (_msg_board != NULL && isBoardChannel(channel_details)) {
     _msg_board->addReceived(text, rtc_clock.getCurrentTime());
+    snapshot();
     if (_display != NULL) _display->forceFullRefresh();   // clean flash for every new message
     if (curr == home && ((NativeHomeScreen*)home)->isOnBoard()) _next_refresh = 100;
     if (_display != NULL && !_display->isOn() && !hasConnection()) _display->turnOn();
@@ -866,6 +874,7 @@ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_det
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
   ((PREVIEW_SCREEN_CLASS *) msg_preview)->addPreview(path_len, channel_details.name, text);
 #ifdef UI_MESSAGE_BOARD
+  snapshot();
   if (_display != NULL) _display->forceFullRefresh();
 #endif
   setCurrScreen(msg_preview);
@@ -930,6 +939,7 @@ void UITask::userLedHandler() {
 void UITask::setCurrScreen(UIScreen* c) {
 #ifdef UI_MESSAGE_BOARD
   if (c != curr && _display != NULL) _display->forceFullRefresh();   // clean flash between screens
+  snapshot();
 #endif
   curr = c;
   _next_refresh = 100;
@@ -1059,6 +1069,9 @@ void UITask::loop() {
 #endif
 
   if (c != 0 && curr) {
+#ifdef UI_MESSAGE_BOARD
+    snapshot();
+#endif
     curr->handleInput(c);
     _auto_off = millis() + AUTO_OFF_MILLIS;   // extend auto-off timer
     _next_refresh = 100;  // trigger refresh

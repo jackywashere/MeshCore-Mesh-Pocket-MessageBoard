@@ -102,10 +102,10 @@ public:
     EinkUI& ui = EinkUI::get();
     UiSettings& s = _task->getUiSettings();
     ui.begin((GxEPDDisplay&)display, uiRotation(s, false), s.dark);
-    uint32_t now = _rtc->getCurrentTime();
+    uint32_t now = _task->snapTime();
     char title[24];
     snprintf(title, sizeof(title), _num > 1 ? "Message  %d unread" : "Message", _num);
-    ui.header(title, now, _task->getNodePrefs()->tz_offset, EinkUI::battPercent(_task->getBattMilliVolts()),
+    ui.header(title, now, _task->getNodePrefs()->tz_offset, EinkUI::battPercent(_task->snapMilliVolts()),
               _task->hasConnection());
     if (_num == 0) { ui.footer("click: back", -1, 0); return 10000; }
 
@@ -180,9 +180,10 @@ private:
   static const int SETTINGS_COUNT = 8;
 
   UiSettings& S() { return _task->getUiSettings(); }
-  uint32_t now() { return _rtc->getCurrentTime(); }
+  uint32_t now() { return _task->snapTime(); }          // frozen between events
+  uint32_t liveNow() { return _rtc->getCurrentTime(); }
   int tz() { return _prefs->tz_offset; }
-  int batt() { return EinkUI::battPercent(_task->getBattMilliVolts()); }
+  int batt() { return EinkUI::battPercent(_task->snapMilliVolts()); }
 
   void goPage(int p) {
     int prev = _page;
@@ -246,11 +247,11 @@ private:
     int top = ui.bodyTop(), bot = ui.bodyBottom();
     int mid = (top + bot) / 2;
     char buf[32];
-    if (now() >= UI_TIME_VALID) {
-      EinkUI::fmtClock(buf, sizeof(buf), now(), tz());
+    if (liveNow() >= UI_TIME_VALID) {
+      EinkUI::fmtClock(buf, sizeof(buf), liveNow(), tz());
       ui.font(u8g2_font_helvB24_tf);
       ui.textC(63, mid + 8, buf);
-      EinkUI::fmtDate(buf, sizeof(buf), now(), tz());
+      EinkUI::fmtDate(buf, sizeof(buf), liveNow(), tz());
       ui.font(u8g2_font_helvR10_tf);
       ui.textC(63, mid + 25, buf);
     } else {
