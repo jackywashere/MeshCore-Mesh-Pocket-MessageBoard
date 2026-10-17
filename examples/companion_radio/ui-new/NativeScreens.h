@@ -20,6 +20,20 @@ static int uiRotation(const UiSettings& s, bool portrait) {
   return s.flip ? (r + 2) % 4 : r;
 }
 
+// shorten text with "..." so it fits max_w in the current font
+static void fitText(EinkUI& ui, char* s, int max_w) {
+  if (ui.width(s) <= max_w) return;
+  int len = strlen(s);
+  while (len > 0) {
+    len--;
+    while (len > 0 && (s[len] & 0xC0) == 0x80) len--;
+    s[len] = 0;
+    char tmp[200];
+    snprintf(tmp, sizeof(tmp), "%s...", s);
+    if (ui.width(tmp) <= max_w) { strcpy(s, tmp); return; }
+  }
+}
+
 static void drawAlertBox(EinkUI& ui, const char* msg) {
   ui.font(u8g2_font_helvB12_tf);
   int w = ui.width(msg) + 36;
@@ -189,6 +203,7 @@ private:
     int prev = _page;
     _page = (p + COUNT) % COUNT;
     _map_mode = false;
+    _map.clearRoute();
     if (_page != prev) display.forceFullRefresh();   // clean flash on every page change
     if (_page == MAP) _map.collect();
   }
@@ -286,8 +301,9 @@ private:
       if (a.name[0] == 0) continue;
       char age[12], right[24], name[33];
       EinkUI::fmtAge(age, sizeof(age), now() - a.recv_timestamp);
-      if (a.path_len == 0) snprintf(right, sizeof(right), "direct  %s", age);
-      else snprintf(right, sizeof(right), "%d hop%s  %s", a.path_len, a.path_len == 1 ? "" : "s", age);
+      int hops = a.path_len & 63;
+      if (hops == 0) snprintf(right, sizeof(right), "direct  %s", age);
+      else snprintf(right, sizeof(right), "%d hop%s  %s", hops, hops == 1 ? "" : "s", age);
       ui.font(u8g2_font_helvR08_tf);
       int rw = ui.width(right);
       ui.text(ui.W - 3 - rw, y + 11, right);
@@ -437,6 +453,17 @@ public:
     : _task(task), _rtc(rtc), _prefs(prefs) { _last_input = millis(); }
 
   bool isOnBoard() const { return _page == BOARD; }
+  bool isOnMap() const { return _page == MAP && !_map_mode; }
+
+  // called for each incoming message while the map page is showing
+  void showRoute(const char* sender, bool has_pos, int32_t lat, int32_t lon, const mesh::Packet* pkt, const char* msg) {
+    _map.collect();
+    bool flood = pkt->isRouteFlood();
+    int hs = flood ? pkt->getPathHashSize() : 1;
+    int hops = flood ? pkt->getPathHashCount() : 0;
+    _map.setRoute(sender, has_pos, lat, lon, pkt->path, hs, hops, !flood, msg, _prefs->node_lat, _prefs->node_lon);
+    display.forceFullRefresh();
+  }
 
 #if UI_DISCOVER_SCREEN
   bool sendDiscoverRequest() {
@@ -468,7 +495,7 @@ public:
   void poll() override {
     if (_shutdown_init && !_task->isButtonPressed()) _task->shutdown();
     uint32_t idle = UiSettings::idleMillis(S().idle);
-    if (idle && millis() - _last_input > idle) {
+    if (idle && _page != MAP && millis() - _last_input > idle) {
       MessageBoard* mb = _task->getMessageBoard();
       bool changed = false;
       if (_edit) { _edit = false; S().save(); changed = true; }
@@ -509,6 +536,14 @@ public:
         _map.render(ui, _prefs->node_lat, _prefs->node_lon, s.map_zoom, _map_mode, UiSettings::nameLen(s.name_len));
         hint = _map_mode ? (portrait ? "click +   double -" : "click: zoom in   double: out   hold: done") : "hold: zoom";
         if (!_map_mode && _prefs->node_lat == 0 && _prefs->node_lon == 0) hint = portrait ? "no location set" : "hold: zoom   (set your location in the app)";
+        if (_map.hasRoute() && !_map_mode) {
+          static char fm[160];
+          snprintf(fm, sizeof(fm), "%s", _map.routeMessage());
+          ui.font(u8g2_font_helvR08_tf);
+          fitText(ui, fm, ui.W - 6);
+          hint = fm;
+          dot = -1;
+        }
         if (_map_mode) dot = -1;
         ui.header(title, now(), tz(), batt(), bt);   // after the map so nothing draws over it
         break;
@@ -568,7 +603,7 @@ public:
 
     if (c == KEY_ENTER) {
       switch (_page) {
-        case MAP: _map_mode = true; _map.collect(); return true;
+        case MAP: _map_mode = true; _map.clearRoute(); _map.collect(); display.forceFullRefresh(); return true;
         case BLUETOOTH:
           if (_task->isBluetoothEnabled()) _task->disableBluetooth(); else _task->enableBluetooth();
           return true;

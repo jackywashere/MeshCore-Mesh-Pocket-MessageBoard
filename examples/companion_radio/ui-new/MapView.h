@@ -14,6 +14,8 @@
 #define MAP_MAX_EDGES  1600
 #define MAP_MAX_XINGS  96
 #define MAP_MAX_LABELS 40
+#define ROUTE_MAX_HOPS 16
+#define ROUTE_MAX_CANDS 6
 
 class MapView {
   struct Node { int32_t lat, lon; char name[12]; };          // 1e-6 degrees
@@ -205,10 +207,230 @@ class MapView {
     if (edges) free(edges);
   }
 
+  // ---- message route
+  struct RPt { int32_t lat, lon; char name[12]; bool known; };
+  RPt _rp[ROUTE_MAX_HOPS + 1];         // [0] = sender, then each hop in order
+  int _rn = 0;
+  bool _route = false;
+  bool _direct = false;
+  char _route_msg[150];
+  char _route_tag[24];
+  int32_t _cl[ROUTE_MAX_HOPS][ROUTE_MAX_CANDS], _co[ROUTE_MAX_HOPS][ROUTE_MAX_CANDS];
+  char _cn_name[ROUTE_MAX_HOPS][ROUTE_MAX_CANDS][12];
+  uint8_t _nc[ROUTE_MAX_HOPS];
+
+#ifdef MAP_SIM
+  struct SimContact { uint8_t key[3]; int32_t lat, lon; char name[32]; uint8_t type; };
+  SimContact _sim[64]; int _nsim = 0;
+public:
+  void simContact(const uint8_t* key, double lat, double lon, const char* name, uint8_t type) {
+    SimContact& c = _sim[_nsim++]; memcpy(c.key, key, 3); c.lat = lround(lat * 1e6); c.lon = lround(lon * 1e6);
+    snprintf(c.name, sizeof(c.name), "%s", name); c.type = type;
+  }
+private:
+#endif
+
+  static float distKm(int32_t la1, int32_t lo1, int32_t la2, int32_t lo2) {
+    float k = cosf(la1 * 1e-6f * 0.0174533f);
+    float dx = (lo2 - lo1) * 1e-6f * 111.32f * k, dy = (la2 - la1) * 1e-6f * 110.57f;
+    return sqrtf(dx * dx + dy * dy);
+  }
+
+  // repeaters / room servers with a location whose key starts with this hop hash
+  void findCandidates(int hop, const uint8_t* h, int hs) {
+    _nc[hop] = 0;
+#ifdef MAP_SIM
+    for (int i = 0; i < _nsim && _nc[hop] < ROUTE_MAX_CANDS; i++) {
+      SimContact& c = _sim[i];
+      if (c.type != 2 && c.type != 3) continue;
+      if (memcmp(c.key, h, hs) != 0) continue;
+      int n = _nc[hop]++;
+      _cl[hop][n] = c.lat; _co[hop][n] = c.lon;
+      EinkUI::sanitize(_cn_name[hop][n], 12, c.name, strlen(c.name));
+    }
+#else
+    ContactsIterator it = the_mesh.startContactsIterator();
+    ContactInfo c;
+    while (_nc[hop] < ROUTE_MAX_CANDS && it.hasNext(&the_mesh, c)) {
+      if (c.type != ADV_TYPE_REPEATER && c.type != ADV_TYPE_ROOM) continue;
+      if (c.gps_lat == 0 && c.gps_lon == 0) continue;
+      if (memcmp(c.id.pub_key, h, hs) != 0) continue;
+      int n = _nc[hop]++;
+      _cl[hop][n] = c.gps_lat; _co[hop][n] = c.gps_lon;
+      EinkUI::sanitize(_cn_name[hop][n], 12, c.name, strlen(c.name));
+    }
+#endif
+  }
+
+  bool lookupByName(const char* name, int32_t& lat, int32_t& lon) {
+#ifdef MAP_SIM
+    for (int i = 0; i < _nsim; i++) if (strcmp(_sim[i].name, name) == 0) { lat = _sim[i].lat; lon = _sim[i].lon; return true; }
+#else
+    ContactsIterator it = the_mesh.startContactsIterator();
+    ContactInfo c;
+    while (it.hasNext(&the_mesh, c)) {
+      if ((c.gps_lat || c.gps_lon) && strcmp(c.name, name) == 0) { lat = c.gps_lat; lon = c.gps_lon; return true; }
+    }
+#endif
+    return false;
+  }
+
+public:
+  bool hasRoute() const { return _route; }
+  void clearRoute() { _route = false; }
+  const char* routeMessage() const { return _route_msg; }
+
+  // Resolve a received message's hop list into map positions. When a short hop id
+  // matches several repeaters, picks the combination with the shortest total path.
+  void setRoute(const char* sender, bool sender_has_pos, int32_t s_lat, int32_t s_lon,
+                const uint8_t* path, int hash_size, int hops, bool direct, const char* msg,
+                double me_lat, double me_lon) {
+    if (hops > ROUTE_MAX_HOPS) hops = ROUTE_MAX_HOPS;
+    _direct = direct;
+    EinkUI::sanitize(_route_msg, sizeof(_route_msg), msg, strlen(msg));
+    RPt& S = _rp[0];
+    EinkUI::sanitize(S.name, sizeof(S.name), sender, strlen(sender));
+    EinkUI::truncChars(S.name, 5);
+    S.known = sender_has_pos || lookupByName(sender, s_lat, s_lon);
+    S.lat = s_lat; S.lon = s_lon;
+    bool have_me = !(me_lat == 0 && me_lon == 0);
+    int32_t mla = lround(me_lat * 1e6), mlo = lround(me_lon * 1e6);
+
+    for (int i = 0; i < hops; i++) findCandidates(i, path + i * hash_size, hash_size);
+
+    // shortest path through the candidate sets (unknown hops are skipped over)
+    static float cost[ROUTE_MAX_HOPS][ROUTE_MAX_CANDS];
+    static int8_t back[ROUTE_MAX_HOPS][ROUTE_MAX_CANDS];
+    static int8_t prev_known[ROUTE_MAX_HOPS];
+    int last = -1;
+    for (int i = 0; i < hops; i++) {
+      prev_known[i] = last;
+      if (_nc[i] == 0) continue;
+      for (int c = 0; c < _nc[i]; c++) {
+        if (last < 0) {
+          cost[i][c] = S.known ? distKm(S.lat, S.lon, _cl[i][c], _co[i][c]) : 0;
+          back[i][c] = -1;
+        } else {
+          float best = 1e30f; int8_t bi = 0;
+          for (int pc = 0; pc < _nc[last]; pc++) {
+            float v = cost[last][pc] + distKm(_cl[last][pc], _co[last][pc], _cl[i][c], _co[i][c]);
+            if (v < best) { best = v; bi = pc; }
+          }
+          cost[i][c] = best; back[i][c] = bi;
+        }
+      }
+      last = i;
+    }
+    for (int i = 0; i < hops; i++) _rp[i + 1].known = false;
+    if (last >= 0) {
+      float best = 1e30f; int bc = 0;
+      for (int c = 0; c < _nc[last]; c++) {
+        float v = cost[last][c] + (have_me ? distKm(_cl[last][c], _co[last][c], mla, mlo) : 0);
+        if (v < best) { best = v; bc = c; }
+      }
+      for (int i = last, c = bc; i >= 0 && c >= 0; ) {
+        RPt& r = _rp[i + 1];
+        r.known = true; r.lat = _cl[i][c]; r.lon = _co[i][c];
+        snprintf(r.name, sizeof(r.name), "%s", _cn_name[i][c]);
+        EinkUI::truncChars(r.name, 5);
+        int pc = back[i][c];
+        i = prev_known[i];
+        c = pc;
+      }
+    }
+    _rn = hops + 1;
+    int unknown = 0;
+    for (int i = 1; i < _rn; i++) if (!_rp[i].known) unknown++;
+    if (direct) snprintf(_route_tag, sizeof(_route_tag), "direct");
+    else if (hops == 0) snprintf(_route_tag, sizeof(_route_tag), "0 hops");
+    else if (unknown) snprintf(_route_tag, sizeof(_route_tag), "%d hop%s, %d ?", hops, hops == 1 ? "" : "s", unknown);
+    else snprintf(_route_tag, sizeof(_route_tag), "%d hop%s", hops, hops == 1 ? "" : "s");
+    _route = true;
+  }
+
+  void routeLine(EinkUI& ui, int x0, int y0, int x1, int y1, bool dashed) {
+    int ph[3] = { 0, 0, 0 };
+    for (int k = 0; k < 3; k++) {
+      int ox = k == 1 ? 1 : 0, oy = k == 2 ? 1 : 0;
+      if (dashed) {
+        float a = x0 + ox, b = y0 + oy, c = x1 + ox, d = y1 + oy;
+        if (!clip(a, b, c, d, 0, _top, _W - 1, _bot)) continue;
+        int n = (int)fmaxf(fabsf(c - a), fabsf(d - b));
+        for (int i = 0; i <= n; i++) {
+          if ((i / 4) % 2) continue;
+          float t = n ? (float)i / n : 0;
+          ui.g->drawPixel(lroundf(a + (c - a) * t), lroundf(b + (d - b) * t), ui.ink);
+        }
+      } else {
+        drawClipped(ui, x0 + ox, y0 + oy, x1 + ox, y1 + oy, false, ph[k]);
+      }
+    }
+  }
+
+  void label(EinkUI& ui, int x, int y, const char* s, int gap) {
+    int tw = ui.width(s);
+    for (int side = 0; side < 4; side++) {
+      int lx = side == 0 ? x + gap : side == 1 ? x - gap - tw : x - tw / 2;
+      int ly = side < 2 ? y + 3 : side == 2 ? y - gap - 1 : y + gap + 9;
+      Rect r = { (int16_t)(lx - 1), (int16_t)(ly - 9), (int16_t)(lx + tw), (int16_t)(ly + 1) };
+      if (lx >= 1 && lx + tw <= _W - 2 && r.y0 > _top && r.y1 < _bot - 11 && isFree(r)) {
+        take(r.x0, r.y0, r.x1, r.y1);
+        ui.g->fillRect(r.x0, r.y0, tw + 2, 11, ui.paper);
+        ui.u8.drawUTF8(lx, ly, s);
+        return;
+      }
+    }
+  }
+
+  void drawRoute(EinkUI& ui, bool have_me, int mex, int mey) {
+    int X[ROUTE_MAX_HOPS + 2], Y[ROUTE_MAX_HOPS + 2];
+    for (int i = 0; i < _rn; i++) if (_rp[i].known) { X[i] = px(_rp[i].lon / 100); Y[i] = py(_rp[i].lat / 100); }
+    ui.crc(_rp, sizeof(RPt) * _rn);
+    // lines: sender -> known hops -> you; dashed across hops without a location
+    int lx = 0, ly = 0;
+    bool have_last = false, gap = false;
+    for (int i = 0; i <= _rn; i++) {
+      bool is_me = i == _rn;
+      bool known = is_me ? have_me : _rp[i].known;
+      if (!known) { if (have_last) gap = true; continue; }
+      int x = is_me ? mex : X[i], y = is_me ? mey : Y[i];
+      if (have_last) routeLine(ui, lx, ly, x, y, gap || (_direct && is_me && i == 1));
+      lx = x; ly = y; have_last = true; gap = false;
+    }
+    // reserve marker areas first so labels avoid them
+    for (int i = 0; i < _rn; i++) if (_rp[i].known) take(X[i] - 8, Y[i] - 8, X[i] + 8, Y[i] + 8);
+    // hop markers
+    for (int i = 1; i < _rn; i++) {
+      if (!_rp[i].known) continue;
+      char s[4];
+      snprintf(s, sizeof(s), "%d", i);
+      ui.font(u8g2_font_helvB08_tf);
+      ui.g->fillCircle(X[i], Y[i], 8, ui.paper);
+      ui.g->fillCircle(X[i], Y[i], 7, ui.ink);
+      ui.inverse();
+      ui.u8.drawUTF8(X[i] - ui.width(s) / 2 + 1, Y[i] + 4, s);
+      ui.normal();
+    }
+    // sender: hollow square
+    if (_rp[0].known) {
+      ui.g->fillRect(X[0] - 5, Y[0] - 5, 11, 11, ui.paper);
+      ui.g->fillRect(X[0] - 4, Y[0] - 4, 9, 9, ui.ink);
+      ui.g->fillRect(X[0] - 2, Y[0] - 2, 5, 5, ui.paper);
+    }
+    ui.font(u8g2_font_helvR08_tf);
+    for (int i = 1; i < _rn; i++) if (_rp[i].known) label(ui, X[i], Y[i], _rp[i].name, 11);
+    ui.font(u8g2_font_helvB08_tf);
+    if (_rp[0].known) label(ui, X[0], Y[0], _rp[0].name, 9);
+  }
+
 public:
   static const int ZOOM_COUNT = 7;
   static int zoomKm(int z) { static const int v[] = { 0, 200, 100, 50, 20, 10, 5 }; return v[z % ZOOM_COUNT]; }
   int count() const { return _count; }
+#ifdef MAP_SIM
+  void simProject(double lat, double lon, int& x, int& y) const { x = px(lround(lon * 1e4)); y = py(lround(lat * 1e4)); }
+  void simClear() { _count = 0; }
+#endif
 
   // Gather contacts that share a location
   void addNode(int32_t lat_e6, int32_t lon_e6, const char* name) {
@@ -247,7 +469,22 @@ public:
     double clat, clon, height_km;
     double k;
     double aspect = (_bot - _top) / (double)_W;   // height / width of the map area
-    if (zoom == 0 && have_me) {
+    if (_route) {
+      double a = 90, b = -90, c = 180, d = -180;
+      int pts = 0;
+      for (int i = 0; i < _rn; i++) {
+        if (!_rp[i].known) continue;
+        double la = _rp[i].lat * 1e-6, lo = _rp[i].lon * 1e-6;
+        a = fmin(a, la); b = fmax(b, la); c = fmin(c, lo); d = fmax(d, lo); pts++;
+      }
+      if (have_me) { a = fmin(a, me_lat); b = fmax(b, me_lat); c = fmin(c, me_lon); d = fmax(d, me_lon); pts++; }
+      if (!pts) { a = b = 49.25; c = d = -123.0; }
+      clat = (a + b) / 2; clon = (c + d) / 2;
+      k = cos(clat * DEG_TO_RAD);
+      double h = (b - a) * 110.57;
+      double w = (d - c) * 111.32 * k * aspect;
+      height_km = fmax(fmax(h, w) * 1.45, 5.0);   // generous margin keeps markers off the edges
+    } else if (zoom == 0 && have_me) {
       // centred on you, grown evenly until every node fits
       clat = me_lat; clon = me_lon;
       k = cos(clat * DEG_TO_RAD);
@@ -257,7 +494,7 @@ public:
         double dlo = fabs(_nodes[i].lon * 1e-6 - me_lon) * 111.32 * k * 2 * aspect;
         h = fmax(h, fmax(dla, dlo));
       }
-      height_km = fmax(h * 1.12, 5.0);
+      height_km = fmax(h * 1.25, 5.0);
     } else if (zoom == 0) {
       double a = 90, b = -90, c = 180, d = -180;
       for (int i = 0; i < _count; i++) {
@@ -269,7 +506,7 @@ public:
       k = cos(clat * DEG_TO_RAD);
       double h = (b - a) * 110.57;
       double w = (d - c) * 111.32 * k * aspect;
-      height_km = fmax(fmax(h, w) * 1.15, 5.0);
+      height_km = fmax(fmax(h, w) * 1.25, 5.0);
     } else {
       if (have_me) { clat = me_lat; clon = me_lon; }
       else if (_count > 0) {
@@ -308,7 +545,7 @@ public:
     }
     int nc = 0;
     int32_t hash = 0;
-    for (int i = 0; i < _count; i++) {
+    for (int i = 0; i < (_route ? 0 : _count); i++) {
       int x = px(_nodes[i].lon / 100), y = py(_nodes[i].lat / 100);
       if (x < 3 || x > _W - 4 || y < _top + 4 || y > _bot - 4) continue;
       hash += x * 31 + y;
@@ -375,6 +612,8 @@ public:
       }
     }
 
+    if (_route) drawRoute(ui, have_me, mex, mey);
+
     // you
     if (have_me && mey >= _top + 6 && mey <= _bot - 6 && mex >= 6 && mex <= _W - 7) {
       ui.g->fillCircle(mex, mey, 6, ui.paper);
@@ -398,8 +637,9 @@ public:
     ui.text(8 + L, _bot - 1, sb);
 
     // zoom tag top right, inverted while zooming
-    char zl[12];
-    if (zoom == 0) snprintf(zl, sizeof(zl), "All");
+    char zl[24];
+    if (_route) snprintf(zl, sizeof(zl), "%s", _route_tag);
+    else if (zoom == 0) snprintf(zl, sizeof(zl), "All");
     else snprintf(zl, sizeof(zl), "%d km", zoomKm(zoom));
     ui.font(u8g2_font_helvB08_tf);
     int tw = ui.width(zl);
@@ -414,7 +654,7 @@ public:
       ui.text(_W - tw - 5, _top + 11, zl);
     }
 
-    if (_count == 0 && !have_me) {
+    if (_count == 0 && !have_me && !_route) {
       ui.font(u8g2_font_helvB08_tf);
       const char* m1 = "No locations yet";
       int w = ui.width(m1) + 10;
