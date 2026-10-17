@@ -815,6 +815,9 @@ void UITask::onMessageRecv(mesh::Packet *pkt, const ContactInfo &from, uint8_t t
 
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
   ((PREVIEW_SCREEN_CLASS *) msg_preview)->addPreview(path_len, from.name, text);
+#ifdef UI_MESSAGE_BOARD
+  if (_display != NULL) _display->forceFullRefresh();
+#endif
   setCurrScreen(msg_preview);
 
   if (_display != NULL) {
@@ -853,6 +856,7 @@ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_det
 #ifdef UI_MESSAGE_BOARD
   if (_msg_board != NULL && isBoardChannel(channel_details)) {
     _msg_board->addReceived(text, rtc_clock.getCurrentTime());
+    if (_display != NULL) _display->forceFullRefresh();   // clean flash for every new message
     if (curr == home && ((NativeHomeScreen*)home)->isOnBoard()) _next_refresh = 100;
     if (_display != NULL && !_display->isOn() && !hasConnection()) _display->turnOn();
     if (!hasConnection()) notify(UIEventType::channelMessage);
@@ -861,6 +865,9 @@ void UITask::onChannelMessageRecv(mesh::Packet *pkt, ChannelDetails& channel_det
 #endif
   uint8_t path_len = pkt->isRouteFlood() ? pkt->path_len : 0xFF;
   ((PREVIEW_SCREEN_CLASS *) msg_preview)->addPreview(path_len, channel_details.name, text);
+#ifdef UI_MESSAGE_BOARD
+  if (_display != NULL) _display->forceFullRefresh();
+#endif
   setCurrScreen(msg_preview);
 
   if (_display != NULL) {
