@@ -119,14 +119,14 @@ public:
     uint32_t now = _task->snapTime();
     char title[24];
     snprintf(title, sizeof(title), _num > 1 ? "Message  %d unread" : "Message", _num);
-    ui.header(title, now, _task->getNodePrefs()->tz_offset, EinkUI::battPercent(_task->snapMilliVolts()),
+    ui.header(title, now, _task->tzHours(), EinkUI::battPercent(_task->snapMilliVolts()),
               _task->hasConnection());
     if (_num == 0) { ui.footer("click: back", -1, 0); return 10000; }
 
     Entry& e = _e[_head];
     int top = ui.bodyTop();
     char meta[24], t[12];
-    if (now >= UI_TIME_VALID && e.ts >= UI_TIME_VALID) EinkUI::fmtClock(t, sizeof(t), e.ts, _task->getNodePrefs()->tz_offset);
+    if (now >= UI_TIME_VALID && e.ts >= UI_TIME_VALID) EinkUI::fmtClock(t, sizeof(t), e.ts, _task->tzHours());
     else EinkUI::fmtAge(t, sizeof(t), now - e.ts);
     if (e.path_len == 0xFF) snprintf(meta, sizeof(meta), "direct  %s", t);
     else snprintf(meta, sizeof(meta), "%d hop%s  %s", e.path_len, e.path_len == 1 ? "" : "s", t);
@@ -191,12 +191,13 @@ private:
   uint32_t _disc_tag = 0, _disc_count = 0, _disc_time = 0;
 #endif
 
-  static const int SETTINGS_COUNT = 8;
+  static const int SETTINGS_COUNT = 9;
+  static int itemAt(int pos) { static const int order[] = { 0, 8, 1, 2, 3, 4, 5, 6, 7 }; return order[pos % SETTINGS_COUNT]; }
 
   UiSettings& S() { return _task->getUiSettings(); }
   uint32_t now() { return _task->snapTime(); }          // frozen between events
   uint32_t liveNow() { return _rtc->getCurrentTime(); }
-  int tz() { return _prefs->tz_offset; }
+  int tz() { return _task->tzHours(); }
   int batt() { return EinkUI::battPercent(_task->snapMilliVolts()); }
 
   void goPage(int p) {
@@ -238,6 +239,12 @@ private:
         else snprintf(val, vsz, "Every %d", UiSettings::refreshEvery(s.refresh));
         break;
       case 7: strcpy(lab, "Map layout"); snprintf(val, vsz, "%s", s.map_portrait ? "Portrait" : "Landscape"); break;
+      case 8: {
+        strcpy(lab, "Time zone");
+        int h = _task->tzHours();
+        snprintf(val, vsz, "%s %s%d", UiSettings::tzLabel(s.tz_mode), h < 0 ? "-" : "+", h < 0 ? -h : h);
+        break;
+      }
     }
   }
   void changeSetting(int i) {
@@ -253,6 +260,7 @@ private:
         display.setMaxPartialRefresh(UiSettings::refreshEvery(s.refresh));
         break;
       case 7: s.map_portrait ^= 1; break;
+      case 8: s.tz_mode = (s.tz_mode + 1) % UiSettings::TZ_COUNT; _task->snapshot(); break;
     }
   }
 
@@ -422,7 +430,7 @@ private:
     char lab[24], val[33];
     for (int k = 0; k < 6 && first + k < SETTINGS_COUNT; k++) {
       int i = first + k, y = top + k * 15;
-      settingLabel(i, lab, val, sizeof(val));
+      settingLabel(itemAt(i), lab, val, sizeof(val));
       char v[33];
       EinkUI::sanitize(v, sizeof(v), val, strlen(val));
       bool sel = _edit && i == _edit_item;
@@ -566,7 +574,7 @@ public:
 
     if (_page == SETTINGS && _edit) {
       if (c == KEY_NEXT || c == KEY_RIGHT) { _edit_item = (_edit_item + 1) % SETTINGS_COUNT; return true; }
-      if (c == KEY_PREV || c == KEY_LEFT) { changeSetting(_edit_item); return true; }
+      if (c == KEY_PREV || c == KEY_LEFT) { changeSetting(itemAt(_edit_item)); return true; }
       if (c == KEY_ENTER) { _edit = false; s.save(); return true; }
       return false;
     }

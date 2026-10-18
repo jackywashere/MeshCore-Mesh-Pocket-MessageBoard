@@ -132,6 +132,7 @@ public:
   MessageBoard* getMessageBoard() { return _msg_board; }
   UiSettings& getUiSettings() { return _ui_settings; }
   NodePrefs* getNodePrefs() { return _node_prefs; }
+  int tzHours() { return _ui_settings.tzHours(rtc_clock.getCurrentTime(), _node_prefs->tz_offset); }
   void snapshot();
   uint32_t snapTime() { if (!_snap_time) snapshot(); return _snap_time; }
   uint16_t snapMilliVolts() { if (!_snap_mv) snapshot(); return _snap_mv; }
