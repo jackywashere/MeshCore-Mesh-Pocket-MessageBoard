@@ -3,7 +3,7 @@
 Custom firmware for the [Heltec MeshPocket](https://heltec.org/project/meshpocket/) that turns its e‑ink screen into a live message board and route map. It's built on [MeshCore](https://github.com/meshcore-dev/MeshCore) v1.18.0 (companion radio, Bluetooth) and works with the regular MeshCore phone app.
 
 <p align="center">
-  <img src="docs/messageboard/hero.png" width="100%" alt="Heltec MeshPocket showing the message board, a live route trace and the settings page">
+  <img src="docs/messageboard/meshpocket-screens.png" width="100%" alt="Heltec MeshPocket showing the message board, a live route trace and the settings page">
 </p>
 <p align="center"><b>Message board</b> &nbsp;·&nbsp; <b>Live route trace</b> &nbsp;·&nbsp; <b>On device settings</b></p>
 <p align="center">▶️ <a href="docs/messageboard/demo.mp4">Watch the 30 second demo</a> &nbsp;·&nbsp; ⬇️ <a href="../../releases/latest">Download the firmware</a></p>
