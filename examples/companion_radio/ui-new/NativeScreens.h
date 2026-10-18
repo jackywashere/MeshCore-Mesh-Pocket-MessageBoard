@@ -170,7 +170,7 @@ public:
 
 class NativeHomeScreen : public UIScreen {
 public:
-  enum Page { BOARD, MAP, STATUS, HEARD, RADIO, BLUETOOTH, ADVERT, DISCOVER, SETTINGS, POWER, COUNT };
+  enum Page { BOARD, MAP, BLUETOOTH, STATUS, HEARD, RADIO, ADVERT, DISCOVER, SETTINGS, POWER, COUNT };
 
 private:
   UITask* _task;
@@ -528,7 +528,7 @@ public:
       return 15000;
     }
 
-    static const char* titles[COUNT] = { "", "Map", "Status", "Recently heard", "Radio", "Bluetooth",
+    static const char* titles[COUNT] = { "", "Map", "Bluetooth", "Status", "Recently heard", "Radio",
                                          "Advert", "Repeaters nearby", "Settings", "Power" };
     const char* title = titles[_page];
     if (_page == SETTINGS && _edit) title = "Settings  editing";
