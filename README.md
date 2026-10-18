@@ -1,128 +1,117 @@
-## About MeshCore
+# MeshCore Message Board for the Heltec MeshPocket
 
-MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
+Custom firmware for the [Heltec MeshPocket](https://heltec.org/project/meshpocket/) that turns its e‑ink screen into a live message board and route map. It's built on [MeshCore](https://github.com/meshcore-dev/MeshCore) v1.18.0 (companion radio, Bluetooth) and works with the regular MeshCore phone app.
 
-## 🔍 What is MeshCore?
+<p align="center">
+  <img src="docs/messageboard/hero.png" width="100%" alt="Heltec MeshPocket showing the message board, a live route trace and the settings page">
+</p>
+<p align="center"><b>Message board</b> &nbsp;·&nbsp; <b>Live route trace</b> &nbsp;·&nbsp; <b>On device settings</b></p>
+<p align="center">▶️ <a href="docs/messageboard/demo.mp4">Watch the 30 second demo</a> &nbsp;·&nbsp; ⬇️ <a href="../../releases/latest">Download the firmware</a></p>
 
-MeshCore now supports a range of LoRa devices, allowing for easy flashing without the need to compile firmware manually. Users can flash a pre-built binary using tools like Adafruit ESPTool and interact with the network through a serial console.
-MeshCore provides the ability to create wireless mesh networks, similar to Meshtastic and Reticulum but with a focus on lightweight multi-hop packet routing for embedded projects. Unlike Meshtastic, which is tailored for casual LoRa communication, or Reticulum, which offers advanced networking, MeshCore balances simplicity with scalability, making it ideal for custom embedded solutions, where devices (nodes) can communicate over long distances by relaying messages through intermediate nodes. This is especially useful in off-grid, emergency, or tactical situations where traditional communication infrastructure is unavailable.
+## What it does
 
-## ⚡ Key Features
+**📋 Message board home screen.** The public channel shows as a live feed, newest message at the bottom, drawn at the screen's full resolution. Your own messages are tagged so they stand out, and a double click scrolls back through recent messages.
 
-* Multi-Hop Packet Routing
-  * Devices can forward messages across multiple nodes, extending range beyond a single radio's reach.
-  * Supports up to a configurable number of hops to balance network efficiency and prevent excessive traffic.
-  * Nodes use fixed roles where "Companion" nodes are not repeating messages at all to prevent adverse routing paths from being used.
-* Supports LoRa Radios – Works with Heltec, RAK Wireless, and other LoRa-based hardware.
-* Decentralized & Resilient – No central server or internet required; the network is self-healing.
-* Low Power Consumption – Ideal for battery-powered or solar-powered devices.
-* Simple to Deploy – Pre-built example applications make it easy to get started.
+**🗺️ Live route trace.** The map page shows the path each incoming message took, hop by hop, through the repeaters it passed, on an offline map. The message and hop count show on screen, and the route stays up until the next message arrives. Set it on your desk and watch the mesh at work.
 
-## 🎯 What Can You Use MeshCore For?
+**🧭 Cleaner navigation.** One button with a hint at the bottom of every page, plus a settings page right on the device.
 
-* Off-Grid Communication: Stay connected even in remote areas.
-* Emergency Response & Disaster Recovery: Set up instant networks where infrastructure is down.
-* Outdoor Activities: Hiking, camping, and adventure racing communication.
-* Tactical & Security Applications: Military, law enforcement, and private security use cases.
-* IoT & Sensor Networks: Collect data from remote sensors and relay it back to a central location.
+<p align="center">
+  <img src="docs/messageboard/board.png" width="49%" alt="Message board">
+  <img src="docs/messageboard/route.png" width="49%" alt="Route trace on the map">
+</p>
+<p align="center">
+  <img src="docs/messageboard/route_portrait.png" width="24%" alt="Route trace in portrait">
+  <img src="docs/messageboard/settings.png" width="37%" alt="Settings page">
+  <img src="docs/messageboard/status.png" width="37%" alt="Status page">
+</p>
 
-## 🚀 How to Get Started
+## Improvements over stock MeshCore
 
-- Watch the [MeshCore QuickStart Playlist](https://www.youtube.com/watch?v=iaFltojJrAc&list=PLshzThxhw4O4WU_iZo3NmNZOv6KMrUuF9) by The Comms Channel
-- Watch the [MeshCore Technical Presentation](https://www.youtube.com/watch?v=OwmkVkZQTf4) by Liam Cottle.
-- Read through our [Frequently Asked Questions](./docs/faq.md) and [Documentation](https://docs.meshcore.io).
-- Flash the MeshCore firmware on a supported device.
-- Connect with a supported client.
+| | Stock MeshCore on MeshPocket | This firmware |
+|---|---|---|
+| Screen rendering | A 128 by 128 layout stretched unevenly onto the 250 by 122 panel | Drawn at the panel's native resolution with crisp fonts |
+| Home screen | Unread count | Live message board for your chosen channel |
+| Map | None | Offline map with clustered nodes and live message routes |
+| Settings on device | No settings page | Channel, text size, name length, time zone, flip, dark mode and more |
+| Ghosting | Quick refreshes only, ghosting builds up | Clean full refresh on page changes, new messages and on a schedule |
+| Fading text | Panel voltage left on, text fades lighter | Panel powered off after each update, text stays dark and uses less battery |
+| Time zone | UTC unless set from a command line | Time zone setting with automatic daylight saving |
+| Hop counts | Wrong when longer repeater IDs are in use | Read correctly for 1, 2 and 3 byte IDs |
+| Header updates | Clock and battery redraw every minute | Only redraw when something happens, so the screen stays still |
 
-For developers:
+## Getting started
 
-- Install [PlatformIO](https://docs.platformio.org) in [Visual Studio Code](https://code.visualstudio.com).
-- Clone and open the MeshCore repository in Visual Studio Code.
-- See the example applications you can modify and run:
-  - [Companion Radio](./examples/companion_radio) - For use with an external chat app, over BLE, USB or Wi-Fi.
-  - [KISS Modem](./examples/kiss_modem) - Serial KISS protocol bridge for host applications. ([protocol docs](./docs/kiss_modem_protocol.md))
-  - [Simple Repeater](./examples/simple_repeater) - Extends network coverage by relaying messages.
-  - [Simple Room Server](./examples/simple_room_server) - A simple BBS server for shared Posts.
-  - [Simple Secure Chat](./examples/simple_secure_chat) - Secure terminal based text communication between devices.
-  - [Simple Sensor](./examples/simple_sensor) - Remote sensor node with telemetry and alerting.
+### 1. Download
 
-The Simple Secure Chat example can be interacted with through the Serial Monitor in Visual Studio Code, or with a Serial USB Terminal on Android.
+Open the [**Releases**](../../releases) page and download the latest `.uf2` file.
 
-## ⚡️ MeshCore Flasher
+> The map currently covers the **West Coast of North America** in detail (southern Vancouver Island and the Lower Mainland down through Puget Sound to Olympia) with coarser coverage of the rest of BC and Washington, and an overview from southern Alaska to the Mexican border. Everything else works anywhere; outside that area the map just won't show coastlines yet. See [Map regions](#map-regions) to build your own.
 
-We have prebuilt firmware ready to flash on supported devices.
+### 2. Flash it
 
-- Launch https://meshcore.io/flasher
-- Select a supported device
-- Flash one of the firmware types:
-  - Companion, Repeater or Room Server
-- Once flashing is complete, you can connect with one of the MeshCore clients below.
+1. Connect the **magnetic pogo pin cable** to the side of the MeshPocket. The USB‑C port only charges and won't work for flashing.
+2. **Double press the reset button.** A drive appears on your computer.
+3. **Drag the `.uf2` file onto that drive.** The MeshPocket reboots into the new firmware on its own.
 
-## 📱 MeshCore Clients
+Your contacts, channels and keys are kept.
 
-**Companion Firmware**
+### 3. First time setup
 
-The companion firmware can be connected to via BLE, USB or Wi-Fi depending on the firmware type you flashed.
+1. **Pair with the MeshCore app** as usual (default Bluetooth PIN `123456` unless you've changed it). The app sets the clock.
+2. **Set your location in the app** so the map can place you.
+3. **Set your time zone on the device:** go to the Settings page, hold the button to edit, click down to *Time zone*, then double click to change it. Hold again to save.
 
-- Web: https://app.meshcore.nz
-- Android: https://play.google.com/store/apps/details?id=com.liamcottle.meshcore.android
-- iOS: https://apps.apple.com/us/app/meshcore/id6742354151?platform=iphone
-- NodeJS: https://github.com/liamcottle/meshcore.js
-- Python: https://github.com/fdlamotte/meshcore-cli
+## Using it
 
-**Repeater and Room Server Firmware**
+| Button | What it does |
+|---|---|
+| **Click** | Next page (on the board, scroll forward when you've scrolled back) |
+| **Double click** | Previous page (on the board, scroll back through older messages) |
+| **Hold** | The page's action, shown at the bottom of each page |
 
-The repeater and room server firmware can be set up via USB in the web config tool.
+**Pages:** Message board, Map, Bluetooth, Status, Recently heard, Radio, Advert, Repeaters nearby, Settings, Power.
 
-- https://config.meshcore.io
+**Message board.** Shows the channel picked in Settings (Public by default). Other people's names are shortened (5 letters by default) to leave room for the message. Hold to switch between small and large text. After a minute on any other page it returns to the board (adjustable).
 
-They can also be managed via LoRa in the mobile app by using the Remote Management feature.
+**Map.** With no messages yet it shows all nodes with a known location, centred on you. When a message arrives, the map fits itself to that message's route: the sender is a square, each repeater is a numbered circle, and you're the ringed circle. Hops without a known location are drawn dotted. The footer shows the message and the corner shows the hop count. Hold to switch between landscape and portrait. The map page never jumps back to the board on its own, so you can leave it watching.
 
-## 🛠 Hardware Compatibility
+**Settings.** Board channel, time zone, text size, name length, flip screen, dark mode, back to board timer, clean refresh frequency and map layout. Saved on the device.
 
-MeshCore is designed for devices listed in the [MeshCore Flasher](https://meshcore.io/flasher)
+### Going back to stock MeshCore
 
-## 📜 License
+Flash the official firmware from [flasher.meshcore.io](https://flasher.meshcore.io) the same way.
 
-MeshCore is open-source software released under the MIT License. You are free to use, modify, and distribute it for personal and commercial projects.
+## How routes are worked out
 
-## Contributing
+Every message that floods across the mesh carries a list of the repeaters that passed it along, stored as short IDs (the first 1 to 3 bytes of each repeater's key). The firmware matches each ID against repeaters in your contacts that share a location. With short IDs, two repeaters can share an ID; when that happens it picks the combination that gives the shortest overall path. Repeaters only appear if your device has heard their advert with a location, so routes get more complete over time.
 
-Please submit PR's using 'dev' as the base branch!
-For minor changes just submit your PR and we'll try to review it, but for anything more 'impactful' please open an Issue first and start a discussion. It is better to sound out what it is you want to achieve first, and try to come to a consensus on what the best approach is, especially when it impacts the structure or architecture of this codebase.
+## Map regions
 
-Here are some general principles you should try to adhere to:
-* Keep it simple. Please, don't think like a high-level lang programmer. Think embedded, and keep code concise, without any unnecessary layers.
-* No dynamic memory allocation, except during setup/begin functions.
-* Use the same brace and indenting style that's in the core source modules. (A .clang-format is probably going to be added soon, but please do NOT retroactively re-format existing code. This just creates unnecessary diffs that make finding problems harder)
+The map is compiled into the firmware from [OpenStreetMap](https://www.openstreetmap.org) coastlines and [Natural Earth](https://www.naturalearthdata.com) lakes, rivers and borders, at three detail levels. To make a build for your area:
 
-Help us prioritize! Please react with thumbs-up to issues/PRs you care about most. We look at reaction counts when planning work.
+1. Edit the `LEVELS` boxes in [`tools/meshpocket_map/gen_map.py`](tools/meshpocket_map/gen_map.py) (instructions at the top of the file).
+2. Run it to regenerate `examples/companion_radio/ui-new/MapData.h`.
+3. Build as below.
 
-### Running unit tests
+Regional builds for more areas are planned. Open an issue if you'd like yours added.
 
-To run unit tests, run the following command:
+## Building from source
 
 ```bash
-pio test --environment native --verbose
+pip install platformio
+pio run -e Mesh_pocket_companion_radio_ble
+python3 bin/uf2conv/uf2conv.py -f 0xADA52840 -c \
+  .pio/build/Mesh_pocket_companion_radio_ble/firmware.hex -o meshpocket-messageboard.uf2
 ```
 
-## Road-Map / To-Do
+The new code lives in `examples/companion_radio/ui-new/` (`NativeScreens.h`, `MessageBoard.h`, `MapView.h`, `EinkUI.h`, `UiSettings.h`) and is only enabled for the MeshPocket build (`-D UI_MESSAGE_BOARD`), so other boards are unaffected.
 
-There are a number of fairly major features in the pipeline, with no particular time-frames attached yet. In very rough chronological order:
-- [X] Companion radio: UI redesign
-- [X] Repeater + Room Server: add ACL's (like Sensor Node has)
-- [X] Standardise Bridge mode for repeaters
-- [ ] Repeater/Bridge: Standardise the Transport Codes for zoning/filtering
-- [X] Core + Repeater: enhanced zero-hop neighbour discovery
-- [ ] Core: round-trip manual path support
-- [ ] Companion + Apps: support for multiple sub-meshes (and 'off-grid' client repeat mode)
-- [ ] Core + Apps: support for LZW message compression
-- [ ] Core: dynamic CR (Coding Rate) for weak vs strong hops
-- [ ] Core: new framework for hosting multiple virtual nodes on one physical device
-- [ ] V2 protocol spec: discussion and consensus around V2 packet protocol, including path hashes, new encryption specs, etc
+## Credits and licenses
 
-## 📞 Get Support
+- [MeshCore](https://github.com/meshcore-dev/MeshCore) by the MeshCore team, MIT license. The original README is in [README-MeshCore.md](README-MeshCore.md).
+- Map data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), available under the [Open Database License](https://opendatacommons.org/licenses/odbl/), via [geo-maps](https://github.com/simonepri/geo-maps).
+- Lakes, rivers and borders from [Natural Earth](https://www.naturalearthdata.com) (public domain).
+- Fonts from [u8g2](https://github.com/olikraus/u8g2), display driver [GxEPD2](https://github.com/ZinggJM/GxEPD2).
 
-- Report bugs and request features on the [GitHub Issues](https://github.com/meshcore-dev/meshcore/issues) page.
-- Find additional guides and components on [my site](https://buymeacoffee.com/ripplebiz).
-- Join [MeshCore Discord](https://meshcore.gg) to chat with the developers and get help from the community.
+This is an independent community project, not affiliated with Heltec or the MeshCore team. Flash at your own risk.

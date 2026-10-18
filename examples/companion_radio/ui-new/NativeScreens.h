@@ -75,6 +75,7 @@ public:
     ui.textC(ui.W / 2, 74, _ver);
     ui.font(u8g2_font_helvR08_tf);
     ui.textC(ui.W / 2, 92, "message board edition");
+    ui.textC(ui.W / 2, 116, "map data \xC2\xA9 OpenStreetMap contributors");
     return 1000;
   }
 

@@ -1,0 +1,44 @@
+name: MeshPocket Message Board Firmware
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'messageboard-*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build
+        run: pio run -e Mesh_pocket_companion_radio_ble
+
+      - name: Make UF2
+        run: |
+          NAME="meshpocket-messageboard-${GITHUB_REF_NAME#messageboard-}"
+          python3 bin/uf2conv/uf2conv.py -f 0xADA52840 -c \
+            .pio/build/Mesh_pocket_companion_radio_ble/firmware.hex -o "$NAME.uf2"
+          echo "UF2=$NAME.uf2" >> $GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meshpocket-messageboard
+          path: ${{ env.UF2 }}
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/messageboard-')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.UF2 }}
